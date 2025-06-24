@@ -15,15 +15,15 @@ __all__ = [
 
 
 class ConstantCoefficientOperator(spla.LinearOperator):
-    def __init__(self, phi, n, inverse=False):
+    def __init__(self, phi, n, shift=0., inverse=False):
         self.dtype = phi.dtype
         self.shape = tuple((n, n))
 
         self.col = np.zeros(n, dtype=self.dtype)
         self.row = np.zeros(n, dtype=self.dtype)
 
-        self.row[0] = 1
-        self.col[0] = 1
+        self.row[0] = 1 - shift
+        self.col[0] = 1 - shift
         self.col[1] = -phi
 
         self.mat = tuple((self.col, self.row))
@@ -36,7 +36,7 @@ class ConstantCoefficientOperator(spla.LinearOperator):
 
 
 class CirculantOperator(spla.LinearOperator):
-    def __init__(self, phi, n, alpha=1., inverse=False):
+    def __init__(self, phi, n, alpha=1., shift=0., inverse=False):
         if np.iscomplexobj(alpha):
             self.dtype = complex
         else:
@@ -44,7 +44,7 @@ class CirculantOperator(spla.LinearOperator):
         self.alpha = alpha
         self.phi = phi
         col = np.zeros(n, dtype=self.dtype)
-        col[:2] = [1, -phi]
+        col[:2] = [1 - shift, -phi]
         self.shape = tuple((n, n))
 
         # fft weighting
@@ -67,7 +67,7 @@ class CirculantOperator(spla.LinearOperator):
 
 
 class VariableCoefficientOperator(spla.LinearOperator):
-    def __init__(self, phis, n, inverse=False):
+    def __init__(self, phis, n, shift=0., inverse=False):
 
         # we're not periodic so possibly ignore last propagator
         self.phis = phis if len(phis) == n-1 else phis[:-1]
@@ -75,7 +75,7 @@ class VariableCoefficientOperator(spla.LinearOperator):
         self.inverse = inverse
 
         mat = diags_array(
-            [np.ones(n), -self.phis],
+            [np.ones(n) - shift, -self.phis],
             offsets=[0, -1], shape=[n, n])
 
         if inverse:
@@ -96,7 +96,9 @@ class VariableCoefficientOperator(spla.LinearOperator):
 
 
 class PeriodicOperator(spla.LinearOperator):
-    def __init__(self, phis, n, alpha=1., inverse=False):
+    def __init__(self, phis, n, alpha=1., shift=0., inverse=False):
+        self.n = n
+
         if np.iscomplexobj(alpha):
             self.dtype = complex
         else:
@@ -109,16 +111,25 @@ class PeriodicOperator(spla.LinearOperator):
 
         # include the periodic element
         self.mat = diags_array(
-            [np.ones(n, dtype=self.dtype),
+            [np.ones(n, dtype=self.dtype) - shift,
              -self.phis[:-1],
              -alpha*self.phis[-1]],
             offsets=[0, -1, n-1], shape=[n, n])
+
+    def update_shift(self, shift):
+        self.mat = diags_array(
+            [np.ones(self.n, dtype=self.dtype) - shift,
+             -self.phis[:-1],
+             -self.phis[-1]],
+            offsets=[0, -1, self.n-1], shape=[self.n, self.n])
+
 
     def _matvec(self, v):
         if self.inverse:
             return spla.spsolve(self.mat, v)
         else:
             return self.mat @ v
+
 
 
 def AllAtOnceOperator(phi, n, alpha=None, inverse=False):
@@ -135,17 +146,20 @@ def AllAtOnceOperator(phi, n, alpha=None, inverse=False):
 
 
 class FloquetTransformOperator(spla.LinearOperator):
-    def __init__(self, phibar, n, v, alpha=1, inverse=False):
+    def __init__(self, phis, phibar, n, v, alpha=1., shift=0., inverse=False):
 
         self.n = n
         self.v = v
+        self.phis=phis
         self.phibar = phibar
+        self.shift = shift
+        self.inverse = inverse
 
         # scaling for fundamental solution
         self.phi_n = phibar**np.arange(n)
 
         self.circulant_mat = CirculantOperator(
-            phibar, n, alpha=alpha, inverse=inverse)
+            phibar, n, alpha=alpha, shift=shift, inverse=inverse)
 
         self.dtype = self.circulant_mat.dtype
         self.shape = self.circulant_mat.shape
@@ -157,6 +171,11 @@ class FloquetTransformOperator(spla.LinearOperator):
             self.v[:] = v
         else:
             self.v[:] = vhat/self.phi_n
+
+    def update_shift(self, shift):
+        self.shift = shift
+        self.circulant_mat = CirculantOperator(
+            self.phibar, self.n, shift=shift, inverse=self.inverse)
 
     def _to_circulant(self, y):
         return y/self.v

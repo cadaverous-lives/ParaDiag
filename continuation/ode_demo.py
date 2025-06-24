@@ -19,15 +19,16 @@ zbar = -0.00 + 0.8j
 dz = 0.16j
 theta = 0.5
 alpha = 1e-4
-zperiods = 1
+zperiods = 2
 
 maxiter = 12
 atol = 1e-10
 rtol = 1e-10
 
-omega = 0.4
-omega_x = 0.4
-omega_v = 0.2
+omega = 1.0
+omega_x = 1.0
+omega_v = 0.5
+# omega_v = "optimal"
 
 update = 'multiplicative'
 
@@ -96,8 +97,8 @@ v0[0] = 1
 v = Jinv(v0)
 v /= phi_mean**np.arange(nt)
 
-F = FloquetTransformOperator(phi_mean, nt, v, alpha=alpha, inverse=False)
-Finv = FloquetTransformOperator(phi_mean, nt, v, alpha=alpha, inverse=True)
+F = FloquetTransformOperator(phi, phihat, nt, v, alpha=alpha, inverse=False)
+Finv = FloquetTransformOperator(phi, phihat, nt, v, alpha=alpha, inverse=True)
 
 Imat = np.eye(nt)
 Fmat = F(Imat)
@@ -111,8 +112,13 @@ print(f"max(F-J) = {np.max(np.abs(dFJ)):.3e}")
 print()
 
 Finv.v[:] = 1
-floquet_continuation(J, Finv, b, x0=x0,
+# floquet_continuation(J, Finv, b, x0=x0,
+#                      maxiter=maxiter, atol=atol,
+#                      omega_x=omega_x, omega_v=omega_v,
+#                      update=update)
+floquet_continuation_shifted_inverse(J, Finv, b, x0=x0,
                      maxiter=maxiter, atol=atol,
+                     shift_fudge=1e-8,
                      omega_x=omega_x, omega_v=omega_v,
                      update=update)
 

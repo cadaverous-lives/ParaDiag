@@ -2,8 +2,9 @@ import numpy as np
 from scipy.sparse.linalg._isolve.utils import make_system
 from scipy.sparse.linalg._isolve.iterative import _get_atol_rtol
 from utils import contraction_rate
+from linear_operators import FloquetTransformOperator, PeriodicOperator
 
-__all__ = ["richardson", "floquet_continuation"]
+__all__ = ["richardson", "floquet_continuation", "floquet_continuation_shifted_inverse"]
 
 
 def optimal_omega(A, M, z):
@@ -151,6 +152,78 @@ def floquet_continuation(J, Qinv, b, x0=None,
 
         if resJ[-1] < atol:
             resQ.append(np.linalg.norm(v0 - J(v)))
+            resJ.append(np.linalg.norm(b - J(x)))
+            print(f"it {iteration+1:>2d} | rJ = {resJ[-1]:.3e} | rQ = {resQ[-1]:.3e}")# | {xnorm = :.2e} | {vnorm = :.2e}")
+            break
+
+    rateJ, r2J = contraction_rate(resJ)
+    rateQ, r2Q = contraction_rate(resQ)
+    print()
+    print(f"Convergence rate (J) = {rateJ:.4e} | R^2 = {r2J:.3e}")
+    print(f"Convergence rate (Q) = {rateQ:.4e} | R^2 = {r2Q:.3e}")
+
+def floquet_continuation_shifted_inverse(J, Finv, b, x0=None,
+                                         omega_x=1, omega_v=1,
+                                         update='multiplicative',
+                                         shift_fudge=1e-8,
+                                         maxiter=10, atol=1e-5):
+    if x0 is None:
+        x = np.zeros_like(b)
+    else:
+        x = x0.copy()
+
+    if not update in ('multiplicative', 'additive'):
+        raise ValueError("update type must be 'multiplicative' or 'additive'")
+
+    v = Finv.v.copy()
+
+    shift = 1.0 - Finv.phibar
+    Qs = PeriodicOperator(Finv.phis, Finv.n, shift=shift)
+    Qs_inv = FloquetTransformOperator(Finv.phis, Finv.phibar, Finv.n, Finv.v, shift=shift-shift_fudge, inverse=True)
+
+    resJ = []
+    resQ = []
+
+    for iteration in range(maxiter):
+        # need to use the rayleigh quotient for convergence
+        Qs.update_shift(0.)
+        Qsv = Qs(v)
+        rho = np.vdot(v, Qsv)/np.vdot(v, v)
+        Qs.update_shift(rho)
+        Qs_inv.update_shift(rho-shift_fudge)
+
+        rQ = - Qs(v)
+        dv = Qs_inv(rQ)
+
+        resQ.append(np.linalg.norm(rQ)/np.linalg.norm(v))
+
+        if update == 'multiplicative':
+            v += dv*get_omega(omega_v, Qs, Qs_inv, dv)
+            # v /= v[0]
+            v /= np.linalg.norm(v)
+            Finv.update_v(v=v)
+            Qs_inv.update_v(v=v)
+
+        rJ = b - J(x)
+        dx = Finv(rJ)
+        resJ.append(np.linalg.norm(rJ))
+
+        x += dx*get_omega(omega_x, J, Finv, dx)
+
+        if update == 'additive':
+            v += dv*get_omega(omega_v, Qs, Qs_inv, dv)
+            # v /= v[0]
+            v /= np.linalg.norm(v)
+            Finv.update_v(v=v)
+            Qs_inv.update_v(v=v)
+
+        vnorm = np.linalg.norm(Finv.v)
+        xnorm = np.linalg.norm(x)
+
+        print(f"it {iteration:>2d} | rJ = {resJ[-1]:.3e} | rQ = {resQ[-1]:.3e}")# | {xnorm = :.2e} | {vnorm = :.2e}")
+
+        if resJ[-1] < atol:
+            resQ.append(np.linalg.norm(- Qs(v)/Finv.phibar))
             resJ.append(np.linalg.norm(b - J(x)))
             print(f"it {iteration+1:>2d} | rJ = {resJ[-1]:.3e} | rQ = {resQ[-1]:.3e}")# | {xnorm = :.2e} | {vnorm = :.2e}")
             break
