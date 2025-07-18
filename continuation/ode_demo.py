@@ -30,7 +30,7 @@ omega_x = 1.0
 omega_v = 0.5
 # omega_v = "optimal"
 
-update = 'multiplicative'
+update = 'additive'
 
 dtype = complex
 

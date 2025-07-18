@@ -34,6 +34,8 @@ def eta_expected(phi, phi_hat, n, alpha):
     return eta, vtheta, dphi
 
 def contraction_rate(res):
+    if len(res) == 1:
+        return 1, 1
     its = np.arange(len(res))
     res /= res[0]
     logc, _, rval, _, _ = linregress(its, np.log(res))

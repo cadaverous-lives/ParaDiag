@@ -77,8 +77,8 @@ def richardson(A, b, x0=None, *, rtol=1e-5, atol=0., maxiter=None,
 
     atol, _ = _get_atol_rtol('cg', bnrm2, atol, rtol)
 
-    if bnrm2 == 0:
-        return postprocess(b), 0
+    # if bnrm2 == 0:
+    #     return postprocess(b), 0
 
     if maxiter is None:
         maxiter = len(b)*10
@@ -161,6 +161,7 @@ def floquet_continuation(J, Qinv, b, x0=None,
     print()
     print(f"Convergence rate (J) = {rateJ:.4e} | R^2 = {r2J:.3e}")
     print(f"Convergence rate (Q) = {rateQ:.4e} | R^2 = {r2Q:.3e}")
+
 
 def floquet_continuation_shifted_inverse(J, Finv, b, x0=None,
                                          omega_x=1, omega_v=1,
